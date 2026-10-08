@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public struct Connection: Equatable, Sendable {
     public enum Kind: String, Sendable { case telnet, vnc, capture }

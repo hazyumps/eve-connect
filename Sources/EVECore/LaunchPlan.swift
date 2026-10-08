@@ -38,6 +38,33 @@ public enum LaunchPlan {
         """
     }
 
+    /// Linux has no Ghostty scripting interface. `ghostty +new-window` forwards
+    /// only --working-directory, --command and --title to the running instance,
+    /// so `wait-after-command` is not available on that path. This wrapper holds
+    /// a failed console open long enough to read the reason; a clean exit closes
+    /// the window immediately, which is nicer than the macOS behaviour.
+    public static let linuxConsoleWrapper = """
+    "$@"
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        printf '\\n[eve-connect] console command exited %s.\\n' "$status"
+        printf 'Press Enter to close this window. '
+        read -r _
+    fi
+    exit "$status"
+    """
+
+    /// Everything after `-e` is argv, not a shell string, so no quoting is
+    /// needed. A bare `ghostty -e` would start a second Ghostty rather than hand
+    /// off to the running one: any command-line argument forces
+    /// gtk-single-instance off (its default is `detect`).
+    public static func linuxConsoleArguments(connection: Connection, terminal: String, telnet: String,
+                                            shell: String = "/bin/sh") throws -> [String] {
+        guard connection.kind == .telnet, let port = connection.port else { throw ConnectError("A telnet connection is required.") }
+        return [terminal, "+new-window", "-e", shell, "-c", linuxConsoleWrapper,
+                "eve-console", telnet, connection.host, String(port)]
+    }
+
     public static func captureArguments(connection: Connection, user: String, identityFile: String) throws -> [String] {
         guard connection.kind == .capture, let interface = connection.interface else { throw ConnectError("A capture connection is required.") }
         guard user.range(of: #"^[a-zA-Z_][a-zA-Z0-9_-]*$"#, options: .regularExpression) != nil,

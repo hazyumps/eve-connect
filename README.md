@@ -1,23 +1,39 @@
 # EVE Connect
 
-A native macOS replacement for the EVE-NG client pack's browser integration.
-Opens telnet consoles in **Ghostty**, graphical consoles in **RealVNC Viewer**,
-and remote packet captures in **Wireshark**.
+A native replacement for the EVE-NG client pack's browser integration. Opens
+telnet consoles in **Ghostty**, graphical consoles in **RealVNC Viewer**
+(macOS) or **TigerVNC** (Linux), and remote packet captures in **Wireshark**.
+
+Two builds share one parser and one test suite:
+
+| | |
+| --- | --- |
+| macOS | `EVEConnect` — a menu-bar helper app that registers with LaunchServices |
+| Linux | `eve-connect` — a CLI registered as an XDG scheme handler by a desktop entry |
 
 ## Status
 
 Version 0.2.2: a background menu-bar helper with a custom native app icon.
 The app builds and launches on Apple Silicon. Manual link testing confirmed
-Ghostty windows/tabs, VNC, and packet capture on the user's EVE server.
-Eleven automated tests cover URL validation, VNC port translation, command quoting,
-Ghostty AppleScript compilation, capture data/EOF delivery, viewer-close cleanup,
-and SSH failure reporting. Automated capture tests use local fixture processes.
-An isolated app copy also verified cold URL launch without a window, accessory
-activation policy (no Dock entry), dispatch after closing settings, reopening
-settings, and a visible error alert. Safari/Firefox handoff through the default
-handlers still needs verification at cutover.
+Ghostty windows/tabs, VNC, and packet capture on the user's EVE server. Fourteen
+core tests cover URL validation, VNC port translation, command quoting, the Linux
+console plan, Ghostty AppleScript compilation, capture data/EOF delivery,
+viewer-close cleanup, and SSH failure reporting. Automated capture tests use
+local fixture processes. An isolated app copy also verified cold URL launch
+without a window, accessory activation policy (no Dock entry), dispatch after
+closing settings, reopening settings, and a visible error alert. Safari/Firefox
+handoff through the default handlers still needs verification at cutover.
+
+The Linux CLI carries the same URL parser, launch plans, and capture pipeline;
+twenty-eight further tests cover its configuration file, desktop entry and
+scheme registration, program lookup, and subprocess handling. It replaces the
+macOS shell with an XDG desktop entry for scheme registration,
+`ghostty +new-window` for consoles, a config file instead of a settings window,
+and `notify-send` for failures. See [Linux](#linux-eve-connect) below.
 
 ## Requirements
+
+macOS:
 
 - macOS 14 or newer; Swift 6 / Xcode command-line tools to build.
 - Ghostty with the scripting interface shipped in 1.3.1, with
@@ -29,6 +45,16 @@ handlers still needs verification at cutover.
 - For captures: working noninteractive SSH authentication, an existing trusted
   host-key entry, and permission to run `tcpdump` on the EVE server.
 
+Linux:
+
+- Ghostty 1.3.1 or newer with the GTK build, which is what provides the
+  `+new-window` action.
+- `telnet`, a VNC viewer, and Wireshark from the distribution. On Fedora 44:
+  `sudo dnf install telnet wireshark tigervnc`. The Swift toolchain is packaged
+  there too — `sudo dnf install swift-lang`, currently 6.3.2.
+- The same capture prerequisites: noninteractive SSH authentication, a trusted
+  host key, and `tcpdump` on the EVE server.
+
 The viewers and telnet are external dependencies; this app does not bundle them.
 
 ## Build and test
@@ -36,6 +62,13 @@ The viewers and telnet are external dependencies; this app does not bundle them.
 ```sh
 swift test
 bash scripts/build-app.sh
+```
+
+On Linux there is no `.app` to assemble:
+
+```sh
+swift build -c release
+install -m755 .build/release/eve-connect ~/.local/bin/eve-connect
 ```
 
 The build prints the path to a fresh `dist/build-XXXXXX/EVE Connect.app`. Each
@@ -85,7 +118,7 @@ queries, fragments, URL escapes, and extra paths are rejected. Capture interface
 use Linux's 15-character name limit and a restricted character set. Capture links
 do not carry SSH credentials or ports; those belong in settings/SSH configuration.
 
-### Ghostty
+### Ghostty (macOS)
 
 The first console launch can trigger macOS's Automation permission prompt. Allow
 EVE Connect to control Ghostty. The app uses Ghostty's `new surface configuration`
@@ -102,7 +135,7 @@ An explicit global `confirm-close-surface = always`, a remote shell's own OSC 13
 markers, a terminal reset, or entering the alternate screen can restore the
 confirmation. It applies to newly opened EVE consoles, not existing tabs.
 
-### Packet captures
+### Packet captures (macOS)
 
 The default SSH user is `root`, matching the old pack. The identity field is blank
 by default to use SSH configuration and the agent. To reuse the old pack's existing
@@ -121,7 +154,60 @@ Wireshark windows open for saving. A session remains listed while its viewer is
 open. Pressing Stop inside Wireshark alone is not an app-level lifecycle signal;
 use EVE Connect's stop button to explicitly stop its SSH stream.
 
-## Manual acceptance before cutover
+## Linux (`eve-connect`)
+
+The same three link types, aimed at the desktop instead of LaunchServices.
+`eve-connect <link>` parses the URL and starts the right viewer. There is no menu
+bar and no settings window: configuration is a file, and failures are a desktop
+notification plus a line on stderr.
+
+```sh
+eve-connect --init      # write ~/.config/eve-connect/config.toml
+eve-connect --check     # resolved programs, and what handles each scheme now
+eve-connect --install   # write the desktop entry and become the handler
+eve-connect --dry-run 'capture://10.1.2.100/vunl0_1_0'
+```
+
+`--install` writes `~/.local/share/applications/eve-connect.desktop`, whose
+`MimeType` claims `x-scheme-handler/telnet`, `…vnc` and `…capture`, and then runs
+`update-desktop-database` plus `xdg-mime default` for each scheme. That is the
+LaunchServices job: Firefox hands an unknown scheme to `xdg-open`/GIO, which
+resolves it through `~/.config/mimeapps.list`. No GNOME components are involved,
+so this works as well under Hyprland as under Workstation.
+
+`vncviewer` from TigerVNC is the default VNC target. RealVNC publishes no
+Fedora viewer package — its combined VNC Connect RPM wants Wayland disabled,
+which is a poor fit on a Wayland desktop — and both viewers take the same
+`host::port` absolute-port form.
+
+Differences from the macOS build, all deliberate:
+
+| | macOS | Linux |
+| --- | --- | --- |
+| Console | Ghostty AppleScript, window or tab | `ghostty +new-window -e …`, always a window |
+| Failed console | `wait after command` keeps the surface | the wrapper prints the exit status and waits for Enter |
+| Close confirmation | OSC 133 workaround (Ghostty 1.3.1 has no per-surface option) | unnecessary when `confirm-close-surface = false` |
+| Settings | menu-bar window | `config.toml`, `--check` |
+| Stop captures | menu item | each capture is its own process; close Wireshark, or stop the `eve-connect` child |
+| Errors | alert and settings window | `notify-send`, plus `~/.local/state/eve-connect/capture.log` for a detached capture |
+
+A bare `ghostty -e` cannot replace the AppleScript path: any command-line
+argument turns `gtk-single-instance` off, so it would start a second Ghostty
+instead of a window in the one already running. `+new-window` hands the command
+to the running instance over D-Bus and forwards only `--working-directory`,
+`--command` and `--title`, which is why `wait-after-command` is not available
+there and the wrapper holds a failed console open instead.
+
+A capture link detaches. The process the desktop entry started re-runs itself
+with `--capture-session` and exits immediately, so the browser is never held
+open for the life of the capture and the SSH-to-Wireshark pipe outlives it.
+
+Config keys, all optional, each a `PATH` name or an absolute path: `terminal`,
+`telnet`, `vnc`, `wireshark`, `ssh_user`, `identity_file`. `--config <path>`
+overrides the file location, and `EVE_CONNECT_CONFIG` does the same from the
+environment.
+
+## Manual acceptance before cutover (macOS)
 
 1. From the app's link field, connect to a running EVE node using its actual console
    port. Verify interactive input, control keys, Ghostty initially closed/open,
@@ -141,10 +227,19 @@ an installer, automatic updates, and notarization are not part of this build.
 
 ## Source layout
 
-- `Sources/EVECore`: URL parsing, launch plans, capture process lifecycle.
-- `Sources/EVEConnect`: AppKit URL delivery, SwiftUI settings, application launchers.
-- `Tests/EVECoreTests`: validation and local subprocess integration tests.
+- `Sources/EVECore`: URL parsing, launch plans for both platforms, capture
+  process lifecycle. Foundation only, so it builds on macOS and Linux.
+- `Sources/EVECLI`: the headless client — config file, desktop entry and scheme
+  registration, viewer launching, notifications.
+- `Sources/EVEConnectCLI`: `main.swift` for the `eve-connect` command.
+- `Sources/EVEConnect`: AppKit URL delivery, SwiftUI settings, application
+  launchers. macOS only; declared in `Package.swift` behind `#if os(macOS)`.
+- `Tests/EVECoreTests`, `Tests/EVECLITests`: validation and local subprocess
+  integration tests. The AppleScript compile check is macOS-only.
 - `Resources`: bundle metadata and Automation entitlement.
 - `scripts/build-app.sh`: release build, bundle assembly, local signing verification.
 - `scripts/render-icon.swift`: original terminal/network vector artwork, rendered
   at every macOS icon size during the build; also emits `icon-preview.png`.
+- `docs/linux-port-research.md`: the sources behind the Linux decisions —
+  Ghostty's `+new-window`, XDG scheme registration, Foundation on Linux, and
+  what is packaged for Fedora — kept so the next port does not repeat it.

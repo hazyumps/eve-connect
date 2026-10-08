@@ -90,6 +90,7 @@ final class ConnectionTests: XCTestCase {
         XCTAssertEqual(String(decoding: bytes, as: UTF8.self), "\u{1b}]133;A\u{7}\u{1b}]133;B\u{7}<eve.example>\n<32769>\n")
     }
 
+    #if os(macOS)
     func testGhosttyScriptCompilesWithInstalledDictionary() throws {
         guard FileManager.default.fileExists(atPath: "/Applications/Ghostty.app") else {
             throw XCTSkip("Ghostty must be installed to compile its AppleScript dictionary.")
@@ -110,4 +111,5 @@ final class ConnectionTests: XCTestCase {
             XCTAssertEqual(process.terminationStatus, 0)
         }
     }
+    #endif
 }
