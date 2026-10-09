@@ -50,9 +50,27 @@ final class ConfigurationTests: XCTestCase {
         configuration.vnc = "/opt/VNC Viewer/vncviewer"
         configuration.identityFile = "~/.ssh/eve"
         configuration.telnet = "/odd/ter\"minal\\name"
+        configuration.vncShared = true
         let (parsed, warnings) = try Configuration.parse(configuration.render())
         XCTAssertEqual(parsed, configuration)
         XCTAssertTrue(warnings.isEmpty)
+    }
+
+    func testSharedVNCIsOffUnlessAskedFor() throws {
+        XCTAssertFalse(Configuration().vncShared)
+        XCTAssertEqual(Configuration().vncViewerArguments(target: "10.1.2.100::32776"), ["10.1.2.100::32776"])
+
+        let (shared, _) = try Configuration.parse("vnc_shared = true\n")
+        XCTAssertTrue(shared.vncShared)
+        XCTAssertEqual(shared.vncViewerArguments(target: "10.1.2.100::32776"),
+                       ["-Shared", "10.1.2.100::32776"], "options come before the host")
+
+        let (off, _) = try Configuration.parse("vnc_shared = FALSE\n")
+        XCTAssertFalse(off.vncShared)
+        XCTAssertThrowsError(try Configuration.parse("vnc_shared = maybe\n"))
+        // Quoting a boolean is a TOML type error, but this parser is deliberately
+        // forgiving about quoting; it only rejects a value it cannot read.
+        XCTAssertTrue(try Configuration.parse("vnc_shared = \"true\"\n").configuration.vncShared)
     }
 
     func testLoadMissingFileUsesDefaultsWithoutFailing() throws {

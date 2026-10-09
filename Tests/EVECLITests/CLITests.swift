@@ -35,6 +35,10 @@ final class CLITests: XCTestCase {
         let vnc = try CLI.plan("vnc://eve.example::32770", configuration: Configuration(vnc: "/usr/bin/vncviewer"))
         XCTAssertEqual(vnc, "vnc eve.example:32770 in /usr/bin/vncviewer\n'/usr/bin/vncviewer' 'eve.example::32770'")
 
+        let shared = try CLI.plan("vnc://eve.example::32770",
+                                  configuration: Configuration(vnc: "/usr/bin/vncviewer", vncShared: true))
+        XCTAssertTrue(shared.hasSuffix("'/usr/bin/vncviewer' '-Shared' 'eve.example::32770'"), shared)
+
         let capture = try CLI.plan("capture://eve.example/eth0", configuration: Configuration(wireshark: "/usr/bin/wireshark"))
         XCTAssertTrue(capture.hasPrefix("capture eve.example:eth0\n"), capture)
         XCTAssertTrue(capture.contains("'root@eve.example'"), capture)

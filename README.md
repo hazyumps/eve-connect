@@ -190,6 +190,7 @@ Differences from the macOS build, all deliberate:
 | | macOS | Linux |
 | --- | --- | --- |
 | Console | Ghostty AppleScript, window or tab | `ghostty +new-window -e …`, always a window |
+| VNC | one window per link, RealVNC | one window per link, TigerVNC; a repeat on the same node takes over unless `vnc_shared` |
 | Failed console | `wait after command` keeps the surface | the wrapper prints the exit status and waits for Enter |
 | Close confirmation | OSC 133 workaround (Ghostty 1.3.1 has no per-surface option) | unnecessary when `confirm-close-surface = false` |
 | Settings | menu-bar window | `config.toml`, `--check` |
@@ -218,10 +219,17 @@ A capture link detaches. The process the desktop entry started re-runs itself
 with `--capture-session` and exits immediately, so the browser is never held
 open for the life of the capture and the SSH-to-Wireshark pipe outlives it.
 
-Config keys, all optional, each a `PATH` name or an absolute path: `terminal`,
-`telnet`, `vnc`, `wireshark`, `ssh_user`, `identity_file`. `--config <path>`
-overrides the file location, and `EVE_CONNECT_CONFIG` does the same from the
-environment.
+Config keys, all optional: `terminal`, `telnet`, `vnc`, `wireshark`, `ssh_user`
+and `identity_file`, each a `PATH` name or an absolute path, plus `vnc_shared`
+(true or false, default false). `--config <path>` overrides the file location,
+and `EVE_CONNECT_CONFIG` does the same from the environment.
+
+A VNC server drops its other connections unless the client asks to share, so a
+second viewer on the *same* node takes the session over. That is the useful
+default — reconnecting to a node you left open gets your session back — and
+`vnc_shared = true` keeps both windows instead (TigerVNC's `-Shared`, passed
+through to whichever viewer is configured). Different nodes are separate
+sessions and never interact.
 
 ## Manual acceptance before cutover (macOS)
 

@@ -11,15 +11,26 @@ public struct Configuration: Equatable, Sendable {
     public var wireshark: String
     public var sshUser: String
     public var identityFile: String
+    public var vncShared: Bool
 
     public init(terminal: String = "ghostty", telnet: String = "telnet", vnc: String = "vncviewer",
-                wireshark: String = "wireshark", sshUser: String = "root", identityFile: String = "") {
+                wireshark: String = "wireshark", sshUser: String = "root", identityFile: String = "",
+                vncShared: Bool = false) {
         self.terminal = terminal
         self.telnet = telnet
         self.vnc = vnc
         self.wireshark = wireshark
         self.sshUser = sshUser
         self.identityFile = identityFile
+        self.vncShared = vncShared
+    }
+
+    /// A VNC server closes other connections when a client does not ask to
+    /// share, so a second viewer on the same node takes the session over. That
+    /// is the useful default — reconnecting gets your session back — and
+    /// `vnc_shared` asks for the other behaviour instead.
+    public func vncViewerArguments(target: String) -> [String] {
+        vncShared ? ["-Shared", target] : [target]
     }
 
     public static let fileName = "config.toml"
@@ -44,6 +55,10 @@ public struct Configuration: Equatable, Sendable {
         # ssh_user and identity_file apply to capture:// links only. Leave
         # identity_file empty to use ~/.ssh/config and the ssh agent; no
         # password is ever stored.
+        #
+        # vnc_shared keeps an existing viewer connected when you open the same
+        # node again (TigerVNC's -Shared). Left false, the newest viewer takes
+        # the session over, which is usually what you want.
 
         terminal      = "\(escaped(terminal))"
         telnet        = "\(escaped(telnet))"
@@ -51,6 +66,7 @@ public struct Configuration: Equatable, Sendable {
         wireshark     = "\(escaped(wireshark))"
         ssh_user      = "\(escaped(sshUser))"
         identity_file = "\(escaped(identityFile))"
+        vnc_shared    = \(vncShared)
         """
     }
 
@@ -82,6 +98,7 @@ public struct Configuration: Equatable, Sendable {
             case "wireshark": configuration.wireshark = value
             case "ssh_user": configuration.sshUser = value
             case "identity_file": configuration.identityFile = value
+            case "vnc_shared": configuration.vncShared = try boolean(value, line: index + 1)
             default: warnings.append("\(fileName) line \(index + 1): ignoring unknown key '\(key)'.")
             }
         }
@@ -101,6 +118,14 @@ public struct Configuration: Equatable, Sendable {
         try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
                                                withIntermediateDirectories: true)
         try (render() + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    private static func boolean(_ raw: String, line: Int) throws -> Bool {
+        switch raw.lowercased() {
+        case "true": return true
+        case "false": return false
+        default: throw ConnectError("\(fileName) line \(line): expected true or false, found '\(raw)'.")
+        }
     }
 
     private static func value(of raw: String, line: Int) throws -> String {

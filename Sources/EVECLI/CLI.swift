@@ -166,7 +166,7 @@ public enum CLI {
                 + arguments.map(LaunchPlan.shellQuote).joined(separator: " ")
         case .vnc:
             let viewer = ToolLookup.resolve(configuration.vnc) ?? configuration.vnc
-            let arguments = [viewer, connection.vncTarget]
+            let arguments = [viewer] + configuration.vncViewerArguments(target: connection.vncTarget)
             return "vnc \(connection.displayName) in \(viewer)\n"
                 + arguments.map(LaunchPlan.shellQuote).joined(separator: " ")
         case .capture:

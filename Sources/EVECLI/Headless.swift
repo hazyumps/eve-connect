@@ -91,7 +91,7 @@ public final class Headless {
 
     private func openVNC(_ connection: Connection) throws {
         let viewer = try tool(configuration.vnc, key: "vnc")
-        spawned.append(try Command.spawnDetached(viewer, [connection.vncTarget]))
+        spawned.append(try Command.spawnDetached(viewer, configuration.vncViewerArguments(target: connection.vncTarget)))
     }
 
     private func startCapture(_ connection: Connection, raw: String) throws {
