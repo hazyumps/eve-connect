@@ -13,7 +13,7 @@ public enum Command {
     public static func run(_ tool: String, _ arguments: [String]) throws -> Result {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("eve-connect-\(UUID().uuidString)")
-        FileManager.default.createFile(atPath: path.path, contents: nil)
+        _ = FileManager.default.createFile(atPath: path.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: path) }
         let output = try FileHandle(forWritingTo: path)
         let process = Process()
@@ -42,7 +42,7 @@ public enum Command {
             try FileManager.default.createDirectory(atPath: (logPath as NSString).deletingLastPathComponent,
                                                    withIntermediateDirectories: true)
             if !FileManager.default.fileExists(atPath: logPath) {
-                FileManager.default.createFile(atPath: logPath, contents: nil)
+                _ = FileManager.default.createFile(atPath: logPath, contents: nil)
             }
             let log = try FileHandle(forWritingTo: URL(fileURLWithPath: logPath))
             _ = try? log.seekToEnd()

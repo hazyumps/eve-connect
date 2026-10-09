@@ -1,5 +1,12 @@
 import XCTest
+import EVECore
 @testable import EVECLI
+
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 final class DesktopEntryTests: XCTestCase {
     private func installer(_ executable: String = "/home/patrick/.local/bin/eve-connect") -> SchemeInstaller {
@@ -38,5 +45,37 @@ final class DesktopEntryTests: XCTestCase {
                        "/data/applications")
         XCTAssertEqual(SchemeInstaller.defaultApplicationsDirectory(home: "/home/p", environment: [:]),
                        "/home/p/.local/share/applications")
+    }
+
+    /// The registration tools are named, not pathed, so they have to be resolved
+    /// before Process sees them — a bare name is looked up as `/xdg-mime`.
+    func testInstallWritesTheEntryAndRunsResolvedTools() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bin = directory.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        let record = directory.appendingPathComponent("calls")
+        for tool in ["update-desktop-database", "xdg-mime"] {
+            let path = bin.appendingPathComponent(tool)
+            try "#!/bin/sh\nprintf '%s\\n' \"\(tool) $*\" >> \(LaunchPlan.shellQuote(record.path))\nexit 0\n"
+                .write(to: path, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
+        }
+
+        let original = ProcessInfo.processInfo.environment["PATH"]
+        setenv("PATH", bin.path, 1)
+        defer { if let original { setenv("PATH", original, 1) } }
+
+        let installer = SchemeInstaller(executablePath: "/usr/local/bin/eve-connect",
+                                       applicationsDirectory: directory.appendingPathComponent("applications").path)
+        try installer.install()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: installer.entryPath))
+        let calls = try String(contentsOfFile: record.path, encoding: .utf8)
+        let lines = calls.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.count, 4, calls)
+        XCTAssertEqual(lines[0], "update-desktop-database \(directory.appendingPathComponent("applications").path)")
+        XCTAssertEqual(lines[1], "xdg-mime default eve-connect.desktop x-scheme-handler/telnet")
+        XCTAssertEqual(lines[3], "xdg-mime default eve-connect.desktop x-scheme-handler/capture")
     }
 }

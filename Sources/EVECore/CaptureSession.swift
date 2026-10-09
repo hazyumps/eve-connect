@@ -2,14 +2,21 @@ import Foundation
 
 /// Each capture owns an independent SSH → Wireshark pipe. Closing Wireshark
 /// ends SSH; an SSH error leaves Wireshark open so captured packets can be saved.
-@MainActor
-public final class CaptureSession {
+///
+/// Foundation delivers process termination handlers on its own reaper thread and
+/// the error pipe's handler on a dispatch queue, so the state they touch is
+/// guarded by a lock rather than by an actor. That keeps this type usable from
+/// the AppKit app and from a plain Linux CLI alike — swift-corelibs-xctest
+/// cannot even discover `@MainActor` test methods, which is how the capture
+/// pipeline stays covered on both platforms.
+public final class CaptureSession: @unchecked Sendable {
     public let id = UUID()
     public let name: String
     private let ssh = Process()
     private let viewer = Process()
     private let stream = Pipe()
     private let errors = Pipe()
+    private let lock = NSLock()
     private var diagnostics = Data()
     private var stopping = false
     private var sshEnded = false
@@ -41,25 +48,23 @@ public final class CaptureSession {
         errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.diagnostics.append(data)
-                self.diagnostics = self.diagnostics.suffix(8192)
-            }
+            guard let self else { return }
+            self.lock.lock()
+            self.diagnostics.append(data)
+            self.diagnostics = self.diagnostics.suffix(8192)
+            self.lock.unlock()
         }
         ssh.terminationHandler = { [weak self] process in
-            let status = process.terminationStatus
-            Task { @MainActor [weak self] in self?.sshExited(status) }
+            self?.sshExited(process.terminationStatus)
         }
         viewer.terminationHandler = { [weak self] process in
-            let status = process.terminationStatus
-            Task { @MainActor [weak self] in self?.viewerExited(status) }
+            self?.viewerExited(process.terminationStatus)
         }
         do {
             try viewer.run()
             try ssh.run()
         } catch {
-            stopping = true
+            lock.lock(); stopping = true; lock.unlock()
             if viewer.isRunning { viewer.terminate() }
             closeParentHandles()
             errors.fileHandleForReading.readabilityHandler = nil
@@ -71,7 +76,7 @@ public final class CaptureSession {
     }
 
     public func stop() {
-        stopping = true
+        lock.lock(); stopping = true; lock.unlock()
         if ssh.isRunning { ssh.terminate() }
         // Leave Wireshark open to let the user save captured data.
     }
@@ -83,30 +88,38 @@ public final class CaptureSession {
     }
 
     private func sshExited(_ status: Int32) {
+        lock.lock()
         sshEnded = true
-        if status != 0 && !stopping {
-            let detail = String(decoding: diagnostics, as: UTF8.self)
+        let quiet = stopping
+        let detail = quiet ? "" : String(decoding: diagnostics, as: UTF8.self)
+        lock.unlock()
+        if status != 0 && !quiet {
             report("Capture \(name) ended (SSH exit \(status)).\n\(detail)\nCheck SSH key authentication, the known-hosts entry, and the interface name.")
         }
         completeIfFinished()
     }
 
     private func viewerExited(_ status: Int32) {
+        lock.lock()
         viewerEnded = true
-        if status != 0 && !stopping {
-            report("Wireshark for \(name) exited with status \(status).\n\(String(decoding: diagnostics, as: UTF8.self))")
+        let quiet = stopping
+        let detail = String(decoding: diagnostics, as: UTF8.self)
+        let producerRunning = ssh.isRunning
+        if producerRunning { stopping = true }
+        lock.unlock()
+        if status != 0 && !quiet {
+            report("Wireshark for \(name) exited with status \(status).\n\(detail)")
         }
-        if ssh.isRunning {
-            stopping = true
-            ssh.terminate()
-        }
+        if producerRunning { ssh.terminate() }
         completeIfFinished()
     }
 
     private func completeIfFinished() {
-        if sshEnded && viewerEnded {
-            errors.fileHandleForReading.readabilityHandler = nil
-            finished(id)
-        }
+        lock.lock()
+        let done = sshEnded && viewerEnded
+        lock.unlock()
+        guard done else { return }
+        errors.fileHandleForReading.readabilityHandler = nil
+        finished(id)
     }
 }

@@ -54,9 +54,18 @@ public final class Headless {
                                                         identityFile: configuration.identityFile)
         let session = CaptureSession(connection: connection, arguments: arguments, wireshark: wireshark,
                                      report: { [notifier] message in notifier.error(message) },
-                                     finished: { [weak self] id in self?.captureFinished(id) })
-        try session.start()
+                                     finished: { [weak self] id in
+                                         Task { @MainActor in self?.captureFinished(id) }
+                                     })
+        // Register before starting: the process handlers run on Foundation's own
+        // threads, so a capture can finish before start() returns.
         captures[session.id] = session
+        do {
+            try session.start()
+        } catch {
+            captures.removeValue(forKey: session.id)
+            throw error
+        }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             if captures.isEmpty {
                 continuation.resume()

@@ -54,9 +54,12 @@ public struct SchemeInstaller: Sendable {
         try FileManager.default.createDirectory(atPath: applicationsDirectory, withIntermediateDirectories: true)
         try (entryContents + "\n").write(toFile: entryPath, atomically: true, encoding: .utf8)
         for command in commands {
-            let result = try Command.run(command.tool, command.arguments)
+            guard let tool = ToolLookup.resolve(command.tool) else {
+                throw ConnectError("\(command.tool) was not found. Install xdg-utils and desktop-file-utils, then run --install again.")
+            }
+            let result = try Command.run(tool, command.arguments)
             guard result.status == 0 else {
-                throw ConnectError("\(command.tool) \(command.arguments.joined(separator: " ")) exited \(result.status).\n\(result.output)")
+                throw ConnectError("\(tool) \(command.arguments.joined(separator: " ")) exited \(result.status).\n\(result.output)")
             }
         }
     }

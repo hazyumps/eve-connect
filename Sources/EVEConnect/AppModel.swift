@@ -131,14 +131,26 @@ final class AppModel: ObservableObject {
         let arguments = try LaunchPlan.captureArguments(connection: connection,
             user: setting("sshUser", fallback: "root"), identityFile: setting("identityFile", fallback: ""))
         let session = CaptureSession(connection: connection, arguments: arguments, wireshark: path,
-            report: { [weak self] message in self?.fail(ConnectError(message)) },
+            report: { [weak self] message in
+                Task { @MainActor in self?.fail(ConnectError(message)) }
+            },
             finished: { [weak self] id in
-                self?.captures.removeValue(forKey: id)
-                self?.captureCount = self?.captures.count ?? 0
+                Task { @MainActor in
+                    self?.captures.removeValue(forKey: id)
+                    self?.captureCount = self?.captures.count ?? 0
+                }
             })
-        try session.start()
+        // Register before starting: the process handlers run on Foundation's own
+        // threads now, so a capture can finish before start() returns.
         captures[session.id] = session
         captureCount = captures.count
+        do {
+            try session.start()
+        } catch {
+            captures.removeValue(forKey: session.id)
+            captureCount = captures.count
+            throw error
+        }
         status = "Started capture for \(connection.displayName)."
     }
 }

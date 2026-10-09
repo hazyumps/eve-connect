@@ -1,7 +1,6 @@
 import XCTest
 @testable import EVECore
 
-@MainActor
 final class CaptureTests: XCTestCase {
     private func fixture(_ body: String, name: String, in directory: URL) throws -> String {
         let path = directory.appendingPathComponent(name)
