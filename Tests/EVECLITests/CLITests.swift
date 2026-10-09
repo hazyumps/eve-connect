@@ -48,12 +48,13 @@ final class CLITests: XCTestCase {
 
     func testCheckNamesWhatIsMissing() {
         let configuration = Configuration(terminal: "sh", telnet: "sh", vnc: "eve-connect-not-installed-xyz", wireshark: "sh")
-        let (text, missing) = CLI.check(configuration: configuration,
-                                        configPath: "/tmp/eve-connect-absent/config.toml")
+        let (text, missing, _) = CLI.check(configuration: configuration,
+                                           configPath: "/tmp/eve-connect-absent/config.toml")
         XCTAssertEqual(missing, ["vnc"])
         XCTAssertTrue(text.contains("NOT FOUND"), text)
         XCTAssertTrue(text.contains("x-scheme-handler/telnet"), text)
         XCTAssertTrue(text.contains("not there yet"), text)
+        XCTAssertTrue(text.contains("capture"), text)
     }
 
     func testAbsoluteExecutableResolvesAndRejects() throws {

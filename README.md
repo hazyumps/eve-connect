@@ -52,6 +52,11 @@ Linux:
 - `telnet`, a VNC viewer, and Wireshark from the distribution. On Fedora 44:
   `sudo dnf install telnet wireshark tigervnc`. The Swift toolchain is packaged
   there too — `sudo dnf install swift-lang`, currently 6.3.2.
+- Membership of the `wireshark` group on Fedora. `dumpcap` is mode 750
+  `root:wireshark`, and Wireshark uses it even for a capture read from stdin, so
+  without the group a capture window opens empty:
+  `sudo usermod -aG wireshark $USER`, then log out and back in. `--check`
+  reports this, and a capture link stops before opening a viewer at all.
 - The same capture prerequisites: noninteractive SSH authentication, a trusted
   host key, and `tcpdump` on the EVE server.
 
@@ -197,6 +202,17 @@ instead of a window in the one already running. `+new-window` hands the command
 to the running instance over D-Bus and forwards only `--working-directory`,
 `--command` and `--title`, which is why `wait-after-command` is not available
 there and the wrapper holds a failed console open instead.
+
+Three platform notes worth knowing before blaming the app. Consoles always open
+as new **windows**: Ghostty 1.3.1's CLI has `+new-window` and no `+new-tab`, so
+the macOS "prefer tab" preference has no Linux equivalent — move a surface into
+a tab with Ghostty's own keybind if you want one. Fedora's capture gate is real:
+`dumpcap` is mode 750 `root:wireshark`, Wireshark uses it even for a stdin
+capture, and without the `wireshark` group the capture comes back empty — so
+`--check` reports it and a capture link refuses to open a viewer rather than
+showing an empty one. And the VNC and Wireshark viewers need an X display:
+launched from a desktop entry they inherit the session's `DISPLAY`, but running
+`eve-connect` from a bare TTY leaves them unable to open a window.
 
 A capture link detaches. The process the desktop entry started re-runs itself
 with `--capture-session` and exits immediately, so the browser is never held

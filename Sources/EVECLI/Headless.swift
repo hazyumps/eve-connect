@@ -50,6 +50,10 @@ public final class Headless {
             throw ConnectError("A capture link is required.")
         }
         let wireshark = try tool(configuration.wireshark, key: "wireshark")
+        // Fail here with the remedy rather than opening a viewer that captures
+        // nothing and blames its own permissions.
+        let permission = CapturePermission.status()
+        if permission.blocked { throw ConnectError(permission.text) }
         let arguments = try LaunchPlan.captureArguments(connection: connection, user: configuration.sshUser,
                                                         identityFile: configuration.identityFile)
         let session = CaptureSession(connection: connection, arguments: arguments, wireshark: wireshark,

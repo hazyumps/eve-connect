@@ -50,11 +50,11 @@ public enum CLI {
         case .check:
             let result = check(configuration: configuration, configPath: configPath)
             print(result.text)
-            guard result.missing.isEmpty else {
+            if !result.missing.isEmpty {
                 fail("Not found: \(result.missing.joined(separator: ", ")). Install them, or edit \(configPath).")
-                return 1
             }
-            return 0
+            for problem in result.blocked { fail(problem) }
+            return result.missing.isEmpty && result.blocked.isEmpty ? 0 : 1
 
         case .initialize:
             do {
@@ -181,11 +181,12 @@ public enum CLI {
     }
 
     /// The dependency checks and handler list the macOS settings window showed.
-    public static func check(configuration: Configuration, configPath: String) -> (text: String, missing: [String]) {
+    public static func check(configuration: Configuration, configPath: String) -> (text: String, missing: [String], blocked: [String]) {
         let exists = FileManager.default.fileExists(atPath: configPath)
         var lines = ["eve-connect \(version)",
                      row("config", exists ? configPath : "\(configPath) (not there yet — defaults in use)")]
         var missing: [String] = []
+        var blocked: [String] = []
         let programs = [("terminal", configuration.terminal), ("telnet", configuration.telnet),
                         ("vnc", configuration.vnc), ("wireshark", configuration.wireshark)]
         for (key, value) in programs {
@@ -200,11 +201,14 @@ public enum CLI {
         lines.append(row("identity", configuration.identityFile.isEmpty
                          ? "(none — ~/.ssh/config and the agent are used)"
                          : configuration.identityFile))
+        let permission = CapturePermission.status()
+        lines.append(row("capture", permission.text))
+        if permission.blocked { blocked.append(permission.text) }
         for scheme in SchemeInstaller.schemes {
             let handler = SchemeInstaller.handler(for: scheme) ?? "none registered"
             lines.append(row("handler \(scheme)", "x-scheme-handler/\(scheme) -> \(handler)"))
         }
-        return (lines.joined(separator: "\n"), missing)
+        return (lines.joined(separator: "\n"), missing, blocked)
     }
 
     public static func usage(program: String) -> String {

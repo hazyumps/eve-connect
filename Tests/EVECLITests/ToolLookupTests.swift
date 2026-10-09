@@ -27,4 +27,14 @@ final class ToolLookupTests: XCTestCase {
     func testMissingProgramResolvesToNil() {
         XCTAssertNil(ToolLookup.resolve("eve-connect-not-installed-xyz", searchPath: "", exists: { _ in false }))
     }
+
+    /// dumpcap on Fedora exists but is not executable by a normal account, and
+    /// reporting it as absent hides the permission problem being diagnosed.
+    func testLocateFindsAFileThisAccountCannotExecute() {
+        XCTAssertEqual(ToolLookup.locate("dumpcap", searchPath: "/usr/bin", exists: { $0 == "/usr/bin/dumpcap" }),
+                       "/usr/bin/dumpcap")
+        XCTAssertEqual(ToolLookup.locate("/usr/bin/dumpcap", searchPath: "", exists: { $0 == "/usr/bin/dumpcap" }),
+                       "/usr/bin/dumpcap")
+        XCTAssertNil(ToolLookup.resolve("/usr/bin/dumpcap", searchPath: "", exists: { _ in false }))
+    }
 }
