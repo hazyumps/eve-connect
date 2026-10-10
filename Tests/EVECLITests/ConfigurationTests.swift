@@ -58,12 +58,12 @@ final class ConfigurationTests: XCTestCase {
 
     func testSharedVNCIsOffUnlessAskedFor() throws {
         XCTAssertFalse(Configuration().vncShared)
-        XCTAssertEqual(Configuration().vncViewerArguments(target: "10.1.2.100::32776"), ["10.1.2.100::32776"])
+        XCTAssertEqual(Configuration().vncViewerArguments(target: "192.0.2.10::32776"), ["192.0.2.10::32776"])
 
         let (shared, _) = try Configuration.parse("vnc_shared = true\n")
         XCTAssertTrue(shared.vncShared)
-        XCTAssertEqual(shared.vncViewerArguments(target: "10.1.2.100::32776"),
-                       ["-Shared", "10.1.2.100::32776"], "options come before the host")
+        XCTAssertEqual(shared.vncViewerArguments(target: "192.0.2.10::32776"),
+                       ["-Shared", "192.0.2.10::32776"], "options come before the host")
 
         let (off, _) = try Configuration.parse("vnc_shared = FALSE\n")
         XCTAssertFalse(off.vncShared)

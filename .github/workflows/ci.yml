@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+          - name: Linux
+            os: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # macOS runners ship Xcode and a Swift 6 toolchain; Linux needs one.
+      - name: Install Swift
+        if: runner.os == 'Linux'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+
+      # Foundation on Linux links against these; the GitHub image has most of
+      # them, but the Swift toolchain's own dependencies are not guaranteed.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            binutils libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev \
+            libncurses-dev libpython3-dev libsqlite3-0 libstdc++-13-dev \
+            libxml2-dev libz3-dev pkg-config tzdata unzip zlib1g-dev
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      # The macOS shell is only exercised by assembling the real bundle, which
+      # is also where the AppleScript compile check lives.
+      - name: Assemble the macOS app bundle
+        if: runner.os == 'macOS'
+        run: bash scripts/build-app.sh

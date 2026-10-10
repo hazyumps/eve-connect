@@ -3,9 +3,9 @@ import XCTest
 
 final class ConnectionTests: XCTestCase {
     func testConsoleLinks() throws {
-        let telnet = try Connection("telnet://10.1.2.100:32769/")
+        let telnet = try Connection("telnet://192.0.2.10:32769/")
         XCTAssertEqual(telnet.kind, .telnet)
-        XCTAssertEqual(telnet.host, "10.1.2.100")
+        XCTAssertEqual(telnet.host, "192.0.2.10")
         XCTAssertEqual(telnet.port, 32769)
         XCTAssertEqual(try Connection("TELNET://eve.example").port, 23)
         XCTAssertEqual(try Connection("telnet://[2001:db8::1]:32769").host, "2001:db8::1")
