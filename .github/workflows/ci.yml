@@ -20,7 +20,7 @@ jobs:
             os: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # macOS runners ship Xcode and a Swift 6 toolchain; Linux needs one.
       - name: Install Swift
